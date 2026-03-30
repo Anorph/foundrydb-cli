@@ -64,6 +64,10 @@ func runOrgList(cmd *cobra.Command, args []string) error {
 		})
 	}
 	table.Render()
-	fmt.Printf("\nTotal: %d organization(s)\n", result.TotalCount)
+	count := result.TotalCount
+	if count == 0 {
+		count = len(result.Organizations)
+	}
+	fmt.Printf("\nTotal: %d organization(s)\n", count)
 	return nil
 }

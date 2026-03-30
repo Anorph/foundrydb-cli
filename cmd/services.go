@@ -105,7 +105,11 @@ func runServicesList(cmd *cobra.Command, args []string) error {
 		})
 	}
 	table.Render()
-	fmt.Printf("\nTotal: %d services\n", result.TotalCount)
+	count := result.TotalCount
+	if count == 0 {
+		count = len(result.Services)
+	}
+	fmt.Printf("\nTotal: %d services\n", count)
 	return nil
 }
 
@@ -135,14 +139,24 @@ func runServicesGet(cmd *cobra.Command, args []string) error {
 	if len(svc.DNSRecords) > 0 {
 		fmt.Printf("\nDNS Records:\n")
 		for _, rec := range svc.DNSRecords {
-			fmt.Printf("  %s:%d (%s)\n", rec.FullDomain, rec.Port, rec.Type)
+			if rec.Port > 0 && rec.Type != "" {
+				fmt.Printf("  %s:%d (%s)\n", rec.FullDomain, rec.Port, rec.Type)
+			} else if rec.Port > 0 {
+				fmt.Printf("  %s:%d\n", rec.FullDomain, rec.Port)
+			} else {
+				fmt.Printf("  %s\n", rec.FullDomain)
+			}
 		}
 	}
 
 	if len(svc.Nodes) > 0 {
 		fmt.Printf("\nNodes:\n")
 		for _, node := range svc.Nodes {
-			fmt.Printf("  %s  role=%-10s  ip=%s\n", node.ID[:8], node.Role, node.IP)
+			if node.IP != "" {
+				fmt.Printf("  %s  role=%-10s  ip=%s\n", node.ID[:8], node.Role, node.IP)
+			} else {
+				fmt.Printf("  %s  role=%s\n", node.ID[:8], node.Role)
+			}
 		}
 	}
 
