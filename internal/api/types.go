@@ -35,10 +35,10 @@ type Node struct {
 
 // ServiceListResponse is the response from GET /managed-services/
 type ServiceListResponse struct {
-	Services   []Service `json:"services"`
-	TotalCount int       `json:"total_count"`
-	Page       int       `json:"page"`
-	PageSize   int       `json:"page_size"`
+	Services []Service `json:"services"`
+	Total    int       `json:"total"`
+	Limit    int       `json:"limit"`
+	Offset   int       `json:"offset"`
 }
 
 // CreateServiceRequest is the request body for POST /managed-services/
@@ -94,14 +94,23 @@ type TriggerBackupResponse struct {
 	Status string `json:"status"`
 }
 
-// Metrics represents current service metrics
-type Metrics struct {
-	CPUUsagePercent    float64 `json:"cpu_usage_percent"`
-	MemoryUsagePercent float64 `json:"memory_usage_percent"`
-	DiskUsagePercent   float64 `json:"disk_usage_percent"`
-	ActiveConnections  int     `json:"active_connections"`
-	ReadsPerSecond     float64 `json:"reads_per_second"`
-	WritesPerSecond    float64 `json:"writes_per_second"`
+// MetricsData holds the core metrics values returned inside the "metrics" key
+type MetricsData struct {
+	CPUUsagePercent        float64 `json:"cpu_usage_percent"`
+	MemoryUsagePercent     float64 `json:"memory_usage_percent"`
+	DiskUsagePercent       float64 `json:"disk_usage_percent"`
+	DatabaseConnectionsActive int  `json:"database_connections_active"`
+	DatabaseQueriesPerSecond  float64 `json:"database_queries_per_second"`
+	DatabaseCacheHitRatio     float64 `json:"database_cache_hit_ratio"`
+	DatabaseReplicationLagSeconds float64 `json:"database_replication_lag_seconds"`
+}
+
+// MetricsResponse is the full response from GET /managed-services/{id}/metrics/current
+type MetricsResponse struct {
+	ServiceID   string      `json:"service_id"`
+	DatabaseType string     `json:"database_type"`
+	Timestamp   string      `json:"timestamp"`
+	Metrics     MetricsData `json:"metrics"`
 }
 
 // RequestLogsResponse is the response from POST /managed-services/{id}/logs
@@ -126,5 +135,4 @@ type Organization struct {
 // OrganizationListResponse is the response from GET /organizations/
 type OrganizationListResponse struct {
 	Organizations []Organization `json:"organizations"`
-	TotalCount    int            `json:"total_count"`
 }

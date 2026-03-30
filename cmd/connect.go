@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/anorph/foundrydb-cli/internal/api"
 	"github.com/spf13/cobra"
@@ -35,7 +36,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if svc.Status != "running" {
+	if !strings.EqualFold(svc.Status, "running") {
 		return fmt.Errorf("service %q is not running (status: %s)", svc.Name, svc.Status)
 	}
 

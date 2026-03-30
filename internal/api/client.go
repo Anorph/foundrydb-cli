@@ -199,13 +199,13 @@ func (c *Client) TriggerBackup(serviceID string) (*TriggerBackupResponse, error)
 }
 
 // GetMetrics returns current metrics for a service
-func (c *Client) GetMetrics(serviceID string) (*Metrics, error) {
+func (c *Client) GetMetrics(serviceID string) (*MetricsResponse, error) {
 	resp, err := c.doRequest("GET", "/managed-services/"+serviceID+"/metrics/current", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var result Metrics
+	var result MetricsResponse
 	if err := decodeJSON(resp, &result); err != nil {
 		return nil, err
 	}

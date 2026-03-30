@@ -105,7 +105,7 @@ func runServicesList(cmd *cobra.Command, args []string) error {
 		})
 	}
 	table.Render()
-	count := result.TotalCount
+	count := result.Total
 	if count == 0 {
 		count = len(result.Services)
 	}
@@ -312,20 +312,9 @@ func resolveService(client *api.Client, idOrName string) (*api.Service, error) {
 }
 
 func formatStatus(status string) string {
-	switch status {
-	case "running":
-		return "running"
-	case "provisioning", "pending":
-		return "provisioning"
-	case "stopped":
-		return "stopped"
-	case "error", "failed":
-		return "error"
-	case "deleting":
-		return "deleting"
-	default:
-		return status
-	}
+	// The API returns PascalCase statuses like "Running", "Pending", "ProvisioningVM", etc.
+	// Pass them through as-is so they display accurately.
+	return status
 }
 
 func printJSON(v interface{}) error {

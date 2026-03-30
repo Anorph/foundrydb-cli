@@ -21,22 +21,23 @@ func runMetrics(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	metrics, err := client.GetMetrics(svc.ID)
+	metricsResp, err := client.GetMetrics(svc.ID)
 	if err != nil {
 		return err
 	}
 
 	if jsonOut {
-		return printJSON(metrics)
+		return printJSON(metricsResp)
 	}
 
+	m := metricsResp.Metrics
 	fmt.Printf("Metrics for service %q\n\n", svc.Name)
-	fmt.Printf("  CPU Usage:          %.1f%%\n", metrics.CPUUsagePercent)
-	fmt.Printf("  Memory Usage:       %.1f%%\n", metrics.MemoryUsagePercent)
-	fmt.Printf("  Disk Usage:         %.1f%%\n", metrics.DiskUsagePercent)
-	fmt.Printf("  Active Connections: %d\n", metrics.ActiveConnections)
-	fmt.Printf("  Reads/sec:          %.1f\n", metrics.ReadsPerSecond)
-	fmt.Printf("  Writes/sec:         %.1f\n", metrics.WritesPerSecond)
+	fmt.Printf("  CPU Usage:          %.1f%%\n", m.CPUUsagePercent)
+	fmt.Printf("  Memory Usage:       %.1f%%\n", m.MemoryUsagePercent)
+	fmt.Printf("  Disk Usage:         %.1f%%\n", m.DiskUsagePercent)
+	fmt.Printf("  Active Connections: %d\n", m.DatabaseConnectionsActive)
+	fmt.Printf("  Queries/sec:        %.1f\n", m.DatabaseQueriesPerSecond)
+	fmt.Printf("  Cache Hit Ratio:    %.1f%%\n", m.DatabaseCacheHitRatio)
 
 	return nil
 }
