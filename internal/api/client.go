@@ -14,6 +14,7 @@ type Client struct {
 	BaseURL    string
 	Username   string
 	Password   string
+	OrgID      string
 	HTTPClient *http.Client
 }
 
@@ -48,6 +49,11 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 	req.SetBasicAuth(c.Username, c.Password)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+
+	// Send org scoping header when an org ID or slug is provided
+	if c.OrgID != "" {
+		req.Header.Set("X-Active-Org-ID", c.OrgID)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -215,6 +221,20 @@ func (c *Client) RequestLogs(serviceID string, lines int) (*RequestLogsResponse,
 	}
 
 	var result RequestLogsResponse
+	if err := decodeJSON(resp, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ListOrganizations returns all organizations the authenticated user belongs to
+func (c *Client) ListOrganizations() (*OrganizationListResponse, error) {
+	resp, err := c.doRequest("GET", "/organizations/", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var result OrganizationListResponse
 	if err := decodeJSON(resp, &result); err != nil {
 		return nil, err
 	}

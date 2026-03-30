@@ -45,8 +45,8 @@ var servicesDeleteCmd = &cobra.Command{
 
 func init() {
 	servicesCreateCmd.Flags().String("name", "", "Service name (required)")
-	servicesCreateCmd.Flags().String("type", "", "Database type: postgresql, mysql, mongodb, valkey, kafka (required)")
-	servicesCreateCmd.Flags().String("version", "", "Database version (required)")
+	servicesCreateCmd.Flags().String("type", "", "Database type: postgresql, mysql, mongodb, valkey, kafka, opensearch, mssql (required)")
+	servicesCreateCmd.Flags().String("version", "", "Database version (required). Supported versions: postgresql=14/15/16/17/18, mysql=8.4, mongodb=6.0/7.0/8.0, valkey=7.2/8.0/8.1/9.0, kafka=3.6/3.7/3.8/3.9/4.0, opensearch=2.19, mssql=4.8")
 	servicesCreateCmd.Flags().String("plan", "tier-2", "Compute plan (e.g. tier-2)")
 	servicesCreateCmd.Flags().String("zone", "se-sto1", "Cloud zone (default: se-sto1)")
 	servicesCreateCmd.Flags().Int("storage-size", 50, "Storage size in GB")
@@ -169,7 +169,7 @@ func runServicesCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	if dbType == "" {
-		fmt.Print("Database type (postgresql/mysql/mongodb/valkey/kafka): ")
+		fmt.Print("Database type (postgresql/mysql/mongodb/valkey/kafka/opensearch/mssql): ")
 		fmt.Scanln(&dbType)
 	}
 	if dbType == "" {
@@ -178,16 +178,16 @@ func runServicesCreate(cmd *cobra.Command, args []string) error {
 
 	validTypes := map[string]bool{
 		"postgresql": true, "mysql": true, "mongodb": true,
-		"valkey": true, "kafka": true,
+		"valkey": true, "kafka": true, "opensearch": true, "mssql": true,
 	}
 	if !validTypes[dbType] {
-		return fmt.Errorf("invalid database type %q, must be one of: postgresql, mysql, mongodb, valkey, kafka", dbType)
+		return fmt.Errorf("invalid database type %q, must be one of: postgresql, mysql, mongodb, valkey, kafka, opensearch, mssql", dbType)
 	}
 
 	if version == "" {
 		defaultVersions := map[string]string{
 			"postgresql": "17", "mysql": "8.4", "mongodb": "7.0",
-			"valkey": "8.1", "kafka": "3.9",
+			"valkey": "8.1", "kafka": "3.9", "opensearch": "2.19", "mssql": "4.8",
 		}
 		fmt.Printf("Database version [%s]: ", defaultVersions[dbType])
 		fmt.Scanln(&version)

@@ -11,11 +11,12 @@ import (
 )
 
 var (
-	cfgFile  string
-	apiURL   string
+	cfgFile string
+	apiURL  string
 	username string
 	password string
-	jsonOut  bool
+	orgID   string
+	jsonOut bool
 )
 
 // rootCmd is the base command
@@ -26,7 +27,7 @@ var rootCmd = &cobra.Command{
 	Long: `fdb is a command-line interface for managing databases on the FoundryDB platform.
 
 It allows you to create, inspect, and manage PostgreSQL, MySQL, MongoDB,
-Valkey, and Kafka services through a simple CLI.`,
+Valkey, Kafka, OpenSearch, and MSSQL services through a simple CLI.`,
 }
 
 // Execute runs the root command
@@ -44,14 +45,17 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&apiURL, "api-url", "", "FoundryDB API base URL (default: https://api.foundrydb.com)")
 	rootCmd.PersistentFlags().StringVar(&username, "username", "", "API username (default: admin)")
 	rootCmd.PersistentFlags().StringVar(&password, "password", "", "API password")
+	rootCmd.PersistentFlags().StringVar(&orgID, "org", "", "Organization UUID or slug (sets X-Active-Org-ID header)")
 	rootCmd.PersistentFlags().BoolVar(&jsonOut, "json", false, "Output raw JSON instead of formatted tables")
 
 	viper.BindPFlag("api_url", rootCmd.PersistentFlags().Lookup("api-url"))
 	viper.BindPFlag("username", rootCmd.PersistentFlags().Lookup("username"))
 	viper.BindPFlag("password", rootCmd.PersistentFlags().Lookup("password"))
+	viper.BindPFlag("org", rootCmd.PersistentFlags().Lookup("org"))
 
 	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(servicesCmd)
+	rootCmd.AddCommand(orgCmd)
 	rootCmd.AddCommand(usersCmd)
 	rootCmd.AddCommand(backupsCmd)
 	rootCmd.AddCommand(connectCmd)
@@ -88,6 +92,7 @@ func newClient() *api.Client {
 	url := viper.GetString("api_url")
 	user := viper.GetString("username")
 	pass := viper.GetString("password")
+	org := viper.GetString("org")
 
 	// Flag overrides
 	if apiURL != "" {
@@ -99,8 +104,13 @@ func newClient() *api.Client {
 	if password != "" {
 		pass = password
 	}
+	if orgID != "" {
+		org = orgID
+	}
 
-	return api.NewClient(url, user, pass)
+	client := api.NewClient(url, user, pass)
+	client.OrgID = org
+	return client
 }
 
 // getConfigPath returns the path to the config file

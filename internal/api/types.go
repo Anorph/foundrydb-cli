@@ -114,3 +114,17 @@ type LogsResponse struct {
 	Status string `json:"status"`
 	Logs   string `json:"logs"`
 }
+
+// Organization represents an organization the user belongs to
+type Organization struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+	Role string `json:"role"`
+}
+
+// OrganizationListResponse is the response from GET /organizations/
+type OrganizationListResponse struct {
+	Organizations []Organization `json:"organizations"`
+	TotalCount    int            `json:"total_count"`
+}

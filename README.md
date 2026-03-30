@@ -1,6 +1,6 @@
 # fdb - FoundryDB CLI
 
-A command-line interface for the [FoundryDB](https://foundrydb.com) managed database platform. Manage PostgreSQL, MySQL, MongoDB, Valkey, and Kafka services from your terminal.
+A command-line interface for the [FoundryDB](https://foundrydb.com) managed database platform. Manage PostgreSQL, MySQL, MongoDB, Valkey, Kafka, OpenSearch, and MSSQL services from your terminal.
 
 ## Installation
 
@@ -73,11 +73,22 @@ These flags work with every command:
 --api-url string    API base URL (default: https://api.foundrydb.com)
 --username string   Username (default: admin)
 --password string   Password
+--org string        Organization UUID or slug (sets X-Active-Org-ID header)
 --json              Output raw JSON instead of formatted tables
 --config string     Config file path (default: ~/.fdb/config.toml)
 ```
 
 ## Commands
+
+### Organizations
+
+```bash
+# List all organizations you belong to
+fdb org list
+
+# List as JSON
+fdb org list --json
+```
 
 ### Authentication
 
@@ -121,6 +132,13 @@ fdb services create \
   --storage-size 50 \
   --storage-tier maxiops
 
+# Create within a specific organization
+fdb services create \
+  --org my-org-slug \
+  --name my-postgres \
+  --type postgresql \
+  --version 17
+
 # Create with allowed CIDRs
 fdb services create \
   --name my-postgres \
@@ -135,7 +153,16 @@ fdb services delete <service-id>
 fdb services delete <service-id> --confirm
 ```
 
-Supported database types: `postgresql`, `mysql`, `mongodb`, `valkey`, `kafka`
+Supported database types: `postgresql`, `mysql`, `mongodb`, `valkey`, `kafka`, `opensearch`, `mssql`
+
+Supported versions by type:
+- **postgresql**: 14, 15, 16, 17, 18
+- **mysql**: 8.4
+- **mongodb**: 6.0, 7.0, 8.0
+- **valkey**: 7.2, 8.0, 8.1, 9.0
+- **kafka**: 3.6, 3.7, 3.8, 3.9, 4.0
+- **opensearch**: 2.19
+- **mssql**: 4.8 (Babelfish/SQL Server compatible, TDS protocol)
 
 ### Connect (interactive shell)
 
