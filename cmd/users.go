@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -40,16 +41,17 @@ func runUsersList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	result, err := client.ListUsers(svc.ID)
+	ctx := context.Background()
+	users, err := client.ListUsers(ctx, svc.ID)
 	if err != nil {
 		return err
 	}
 
 	if jsonOut {
-		return printJSON(result)
+		return printJSON(users)
 	}
 
-	if len(result.Users) == 0 {
+	if len(users) == 0 {
 		fmt.Printf("No users found for service %q.\n", svc.Name)
 		return nil
 	}
@@ -66,10 +68,10 @@ func runUsersList(cmd *cobra.Command, args []string) error {
 	table.SetTablePadding("  ")
 	table.SetNoWhiteSpace(true)
 
-	for _, u := range result.Users {
+	for _, u := range users {
 		table.Append([]string{
 			u.Username,
-			u.CreatedAt.Format("2006-01-02 15:04:05"),
+			u.CreatedAt,
 		})
 	}
 	table.Render()
@@ -85,7 +87,8 @@ func runUsersRevealPassword(cmd *cobra.Command, args []string) error {
 	}
 
 	username := args[1]
-	result, err := client.RevealPassword(svc.ID, username)
+	ctx := context.Background()
+	result, err := client.RevealPassword(ctx, svc.ID, username)
 	if err != nil {
 		return err
 	}

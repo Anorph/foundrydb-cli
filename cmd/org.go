@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -25,16 +26,17 @@ func init() {
 
 func runOrgList(cmd *cobra.Command, args []string) error {
 	client := newClient()
-	result, err := client.ListOrganizations()
+	ctx := context.Background()
+	orgs, err := client.ListOrganizations(ctx)
 	if err != nil {
 		return err
 	}
 
 	if jsonOut {
-		return printJSON(result)
+		return printJSON(orgs)
 	}
 
-	if len(result.Organizations) == 0 {
+	if len(orgs) == 0 {
 		fmt.Println("No organizations found.")
 		return nil
 	}
@@ -51,7 +53,7 @@ func runOrgList(cmd *cobra.Command, args []string) error {
 	table.SetTablePadding("  ")
 	table.SetNoWhiteSpace(true)
 
-	for _, org := range result.Organizations {
+	for _, org := range orgs {
 		shortID := org.ID
 		if len(shortID) > 8 {
 			shortID = shortID[:8]
@@ -64,6 +66,6 @@ func runOrgList(cmd *cobra.Command, args []string) error {
 		})
 	}
 	table.Render()
-	fmt.Printf("\nTotal: %d organization(s)\n", len(result.Organizations))
+	fmt.Printf("\nTotal: %d organization(s)\n", len(orgs))
 	return nil
 }

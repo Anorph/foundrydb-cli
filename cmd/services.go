@@ -1,13 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/anorph/foundrydb-cli/internal/api"
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
@@ -63,16 +64,17 @@ func init() {
 
 func runServicesList(cmd *cobra.Command, args []string) error {
 	client := newClient()
-	result, err := client.ListServices()
+	ctx := context.Background()
+	services, err := client.ListServices(ctx)
 	if err != nil {
 		return err
 	}
 
 	if jsonOut {
-		return printJSON(result)
+		return printJSON(services)
 	}
 
-	if len(result.Services) == 0 {
+	if len(services) == 0 {
 		fmt.Println("No services found.")
 		return nil
 	}
@@ -89,7 +91,7 @@ func runServicesList(cmd *cobra.Command, args []string) error {
 	table.SetTablePadding("  ")
 	table.SetNoWhiteSpace(true)
 
-	for _, svc := range result.Services {
+	for _, svc := range services {
 		shortID := svc.ID
 		if len(shortID) > 8 {
 			shortID = shortID[:8]
@@ -97,19 +99,15 @@ func runServicesList(cmd *cobra.Command, args []string) error {
 		table.Append([]string{
 			shortID,
 			svc.Name,
-			svc.DatabaseType,
+			string(svc.DatabaseType),
 			svc.Version,
-			formatStatus(svc.Status),
+			formatStatus(string(svc.Status)),
 			svc.PlanName,
 			svc.Zone,
 		})
 	}
 	table.Render()
-	count := result.Total
-	if count == 0 {
-		count = len(result.Services)
-	}
-	fmt.Printf("\nTotal: %d services\n", count)
+	fmt.Printf("\nTotal: %d services\n", len(services))
 	return nil
 }
 
@@ -128,34 +126,21 @@ func runServicesGet(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("ID:           %s\n", svc.ID)
 	fmt.Printf("Name:         %s\n", svc.Name)
-	fmt.Printf("Database:     %s %s\n", svc.DatabaseType, svc.Version)
-	fmt.Printf("Status:       %s\n", formatStatus(svc.Status))
+	fmt.Printf("Database:     %s %s\n", string(svc.DatabaseType), svc.Version)
+	fmt.Printf("Status:       %s\n", formatStatus(string(svc.Status)))
 	fmt.Printf("Plan:         %s\n", svc.PlanName)
-	fmt.Printf("Storage:      %d GB (%s)\n", svc.StorageSizeGB, svc.StorageTier)
+	fmt.Printf("Storage:      %d GB (%s)\n", svc.StorageSizeGB, string(svc.StorageTier))
 	fmt.Printf("Zone:         %s\n", svc.Zone)
-	fmt.Printf("Created:      %s\n", svc.CreatedAt.Format("2006-01-02 15:04:05"))
-	fmt.Printf("Updated:      %s\n", svc.UpdatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Printf("Created:      %s\n", svc.CreatedAt)
+	fmt.Printf("Updated:      %s\n", svc.UpdatedAt)
 
 	if len(svc.DNSRecords) > 0 {
 		fmt.Printf("\nDNS Records:\n")
 		for _, rec := range svc.DNSRecords {
-			if rec.Port > 0 && rec.Type != "" {
-				fmt.Printf("  %s:%d (%s)\n", rec.FullDomain, rec.Port, rec.Type)
-			} else if rec.Port > 0 {
-				fmt.Printf("  %s:%d\n", rec.FullDomain, rec.Port)
+			if rec.RecordType != "" && rec.Value != "" {
+				fmt.Printf("  %s (%s -> %s)\n", rec.FullDomain, rec.RecordType, rec.Value)
 			} else {
 				fmt.Printf("  %s\n", rec.FullDomain)
-			}
-		}
-	}
-
-	if len(svc.Nodes) > 0 {
-		fmt.Printf("\nNodes:\n")
-		for _, node := range svc.Nodes {
-			if node.IP != "" {
-				fmt.Printf("  %s  role=%-10s  ip=%s\n", node.ID[:8], node.Role, node.IP)
-			} else {
-				fmt.Printf("  %s  role=%s\n", node.ID[:8], node.Role)
 			}
 		}
 	}
@@ -210,9 +195,9 @@ func runServicesCreate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	req := api.CreateServiceRequest{
+	req := foundrydb.CreateServiceRequest{
 		Name:          name,
-		DatabaseType:  dbType,
+		DatabaseType:  foundrydb.DatabaseType(dbType),
 		Version:       version,
 		PlanName:      plan,
 		Zone:          zone,
@@ -228,7 +213,8 @@ func runServicesCreate(cmd *cobra.Command, args []string) error {
 		name, dbType, version, plan, zone, storageSize, storageTier)
 
 	client := newClient()
-	svc, err := client.CreateService(req)
+	ctx := context.Background()
+	svc, err := client.CreateService(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -268,7 +254,8 @@ func runServicesDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Deleting service %q...\n", svc.Name)
-	if err := client.DeleteService(svc.ID); err != nil {
+	ctx := context.Background()
+	if err := client.DeleteService(ctx, svc.ID); err != nil {
 		return err
 	}
 
@@ -277,21 +264,23 @@ func runServicesDelete(cmd *cobra.Command, args []string) error {
 }
 
 // resolveService finds a service by ID or name
-func resolveService(client *api.Client, idOrName string) (*api.Service, error) {
+func resolveService(client *foundrydb.Client, idOrName string) (*foundrydb.Service, error) {
+	ctx := context.Background()
+
 	// Try direct ID lookup first
-	svc, err := client.GetService(idOrName)
-	if err == nil {
+	svc, err := client.GetService(ctx, idOrName)
+	if err == nil && svc != nil {
 		return svc, nil
 	}
 
 	// If that failed, search by name in the list
-	list, listErr := client.ListServices()
+	services, listErr := client.ListServices(ctx)
 	if listErr != nil {
 		return nil, fmt.Errorf("service not found by ID (%s) and could not list services: %w", err, listErr)
 	}
 
-	var matches []api.Service
-	for _, s := range list.Services {
+	var matches []foundrydb.Service
+	for _, s := range services {
 		if s.Name == idOrName {
 			matches = append(matches, s)
 		}

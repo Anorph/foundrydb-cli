@@ -8,19 +8,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anorph/foundrydb-cli/internal/api"
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/spf13/viper"
 )
 
 func TestRunAuthLogout_NoConfig(t *testing.T) {
-	// No config file exists - should print "No credentials saved."
-	// Use a temp dir as HOME so there's definitely no .fdb/config.toml
 	dir := t.TempDir()
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", dir)
 	defer os.Setenv("HOME", oldHome)
 
-	// Reset flags so getConfigPath uses $HOME
 	cfgFile = ""
 
 	out, err := executeCommand(t, "auth", "logout")
@@ -33,7 +30,6 @@ func TestRunAuthLogout_NoConfig(t *testing.T) {
 }
 
 func TestRunAuthLogout_WithConfig(t *testing.T) {
-	// Create a temp config file in ~/.fdb/config.toml, then logout should remove it
 	dir := t.TempDir()
 	fdbDir := filepath.Join(dir, ".fdb")
 	if err := os.MkdirAll(fdbDir, 0700); err != nil {
@@ -44,7 +40,6 @@ func TestRunAuthLogout_WithConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Override HOME so getConfigPath returns our temp path
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", dir)
 	defer os.Setenv("HOME", oldHome)
@@ -58,15 +53,12 @@ func TestRunAuthLogout_WithConfig(t *testing.T) {
 	if !strings.Contains(out, "Logged out") {
 		t.Errorf("expected 'Logged out', got: %q", out)
 	}
-	// Config file should have been removed
 	if _, statErr := os.Stat(configPath); !os.IsNotExist(statErr) {
 		t.Errorf("expected config file to be removed after logout")
 	}
 }
 
 func TestRunAuthStatus_NoConfig(t *testing.T) {
-	// When no config file exists, should report not logged in.
-	// Use a temp dir as HOME so there's no ~/.fdb/config.toml
 	dir := t.TempDir()
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", dir)
@@ -74,7 +66,6 @@ func TestRunAuthStatus_NoConfig(t *testing.T) {
 
 	cfgFile = ""
 
-	// Also reset viper so it reads from the temp home
 	viper.Reset()
 	viper.SetDefault("api_url", "https://api.foundrydb.com")
 	viper.SetDefault("username", "admin")
@@ -94,16 +85,14 @@ func TestRunAuthStatus_NoConfig(t *testing.T) {
 }
 
 func TestRunAuthStatus_WithValidCredentials(t *testing.T) {
-	// Create a mock server and a real config file pointing to it
 	svc := sampleService()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.ServiceListResponse{Services: []api.Service{svc}})
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(listServicesResponse{Services: []foundrydb.Service{svc}})
 	})
 	srv, cleanup := setupTestServer(t, mux)
 	defer cleanup()
 
-	// Write a config file in a temp HOME
 	dir := t.TempDir()
 	fdbDir := filepath.Join(dir, ".fdb")
 	os.MkdirAll(fdbDir, 0700)
@@ -134,16 +123,14 @@ func TestRunAuthStatus_WithValidCredentials(t *testing.T) {
 }
 
 func TestRunAuthLogin_WithFlags(t *testing.T) {
-	// auth login with --api-url, --username, --password flags
 	svc := sampleService()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.ServiceListResponse{Services: []api.Service{svc}})
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(listServicesResponse{Services: []foundrydb.Service{svc}})
 	})
 	srv, cleanup := setupTestServer(t, mux)
 	defer cleanup()
 
-	// Write config to temp dir
 	dir := t.TempDir()
 	fdbDir := filepath.Join(dir, ".fdb")
 	os.MkdirAll(fdbDir, 0700)
@@ -165,7 +152,6 @@ func TestRunAuthLogin_WithFlags(t *testing.T) {
 	if !strings.Contains(out, "Logged in as") {
 		t.Errorf("expected 'Logged in as' in output, got: %q", out)
 	}
-	// Config file should have been created
 	configPath := filepath.Join(dir, ".fdb", "config.toml")
 	data, readErr := os.ReadFile(configPath)
 	if readErr != nil {
@@ -177,7 +163,7 @@ func TestRunAuthLogin_WithFlags(t *testing.T) {
 
 func TestRunAuthLogin_InvalidCredentials(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	})
 	srv, cleanup := setupTestServer(t, mux)

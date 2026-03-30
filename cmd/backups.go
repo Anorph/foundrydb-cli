@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
@@ -40,16 +42,17 @@ func runBackupsList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	result, err := client.ListBackups(svc.ID)
+	ctx := context.Background()
+	backups, err := client.ListBackups(ctx, svc.ID)
 	if err != nil {
 		return err
 	}
 
 	if jsonOut {
-		return printJSON(result)
+		return printJSON(backups)
 	}
 
-	if len(result.Backups) == 0 {
+	if len(backups) == 0 {
 		fmt.Printf("No backups found for service %q.\n", svc.Name)
 		return nil
 	}
@@ -66,25 +69,25 @@ func runBackupsList(cmd *cobra.Command, args []string) error {
 	table.SetTablePadding("  ")
 	table.SetNoWhiteSpace(true)
 
-	for _, b := range result.Backups {
+	for _, b := range backups {
 		shortID := b.ID
 		if len(shortID) > 8 {
 			shortID = shortID[:8]
 		}
 		sizeStr := "-"
-		if b.SizeBytes > 0 {
-			sizeStr = formatBytes(b.SizeBytes)
+		if b.SizeBytes != nil && *b.SizeBytes > 0 {
+			sizeStr = formatBytes(*b.SizeBytes)
 		}
 		table.Append([]string{
 			shortID,
-			b.Type,
-			b.Status,
+			string(b.BackupType),
+			string(b.Status),
 			sizeStr,
-			b.CreatedAt.Format("2006-01-02 15:04:05"),
+			b.CreatedAt,
 		})
 	}
 	table.Render()
-	fmt.Printf("\nTotal: %d backups\n", len(result.Backups))
+	fmt.Printf("\nTotal: %d backups\n", len(backups))
 	return nil
 }
 
@@ -98,18 +101,19 @@ func runBackupsTrigger(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Triggering backup for service %q...\n", svc.Name)
 
-	result, err := client.TriggerBackup(svc.ID)
+	ctx := context.Background()
+	backup, err := client.TriggerBackup(ctx, svc.ID, foundrydb.CreateBackupRequest{})
 	if err != nil {
 		return err
 	}
 
 	if jsonOut {
-		return printJSON(result)
+		return printJSON(backup)
 	}
 
 	fmt.Printf("Backup triggered successfully.\n")
-	fmt.Printf("  Backup ID: %s\n", result.ID)
-	fmt.Printf("  Status:    %s\n", result.Status)
+	fmt.Printf("  Backup ID: %s\n", backup.ID)
+	fmt.Printf("  Status:    %s\n", backup.Status)
 	fmt.Printf("\nUse 'fdb backups list %s' to monitor progress.\n", svc.ID)
 	return nil
 }

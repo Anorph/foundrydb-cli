@@ -5,15 +5,14 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/anorph/foundrydb-cli/internal/api"
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 )
 
-func sampleUsers() []api.DatabaseUser {
-	return []api.DatabaseUser{
-		{Username: "app_user", CreatedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)},
-		{Username: "readonly", CreatedAt: time.Date(2025, 1, 2, 8, 0, 0, 0, time.UTC)},
+func sampleUsers() []foundrydb.DatabaseUser {
+	return []foundrydb.DatabaseUser{
+		{Username: "app_user", CreatedAt: "2025-01-01T12:00:00Z"},
+		{Username: "readonly", CreatedAt: "2025-01-02T08:00:00Z"},
 	}
 }
 
@@ -24,7 +23,7 @@ func TestRunUsersList_WithUsers(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/database-users") {
-			json.NewEncoder(w).Encode(api.UserListResponse{Users: users})
+			json.NewEncoder(w).Encode(foundrydb.ListUsersResponse{Users: users})
 			return
 		}
 		json.NewEncoder(w).Encode(svc)
@@ -52,7 +51,7 @@ func TestRunUsersList_Empty(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/database-users") {
-			json.NewEncoder(w).Encode(api.UserListResponse{Users: []api.DatabaseUser{}})
+			json.NewEncoder(w).Encode(foundrydb.ListUsersResponse{Users: []foundrydb.DatabaseUser{}})
 			return
 		}
 		json.NewEncoder(w).Encode(svc)
@@ -76,7 +75,7 @@ func TestRunUsersList_JSONOut(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/database-users") {
-			json.NewEncoder(w).Encode(api.UserListResponse{Users: users})
+			json.NewEncoder(w).Encode(foundrydb.ListUsersResponse{Users: users})
 			return
 		}
 		json.NewEncoder(w).Encode(svc)
@@ -91,14 +90,14 @@ func TestRunUsersList_JSONOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, `"users"`) {
-		t.Errorf("expected JSON output, got: %q", out)
+	if !strings.Contains(out, `"username"`) {
+		t.Errorf("expected JSON output with 'username' field, got: %q", out)
 	}
 }
 
 func TestRunUsersRevealPassword_Success(t *testing.T) {
 	svc := sampleService()
-	revealResp := api.RevealPasswordResponse{
+	revealResp := foundrydb.RevealPasswordResponse{
 		Username:         "app_user",
 		Password:         "s3cr3t",
 		Host:             "my-pg.db.foundrydb.com",
@@ -141,7 +140,7 @@ func TestRunUsersRevealPassword_Success(t *testing.T) {
 
 func TestRunUsersRevealPassword_NoConnectionString(t *testing.T) {
 	svc := sampleService()
-	revealResp := api.RevealPasswordResponse{
+	revealResp := foundrydb.RevealPasswordResponse{
 		Username: "app_user",
 		Password: "s3cr3t",
 		Host:     "my-pg.db.foundrydb.com",
@@ -172,7 +171,7 @@ func TestRunUsersRevealPassword_NoConnectionString(t *testing.T) {
 
 func TestRunUsersRevealPassword_JSONOut(t *testing.T) {
 	svc := sampleService()
-	revealResp := api.RevealPasswordResponse{
+	revealResp := foundrydb.RevealPasswordResponse{
 		Username: "app_user",
 		Password: "s3cr3t",
 	}

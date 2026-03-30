@@ -6,13 +6,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anorph/foundrydb-cli/internal/api"
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 )
 
 func TestRunOrgList_Empty(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/organizations/", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.OrganizationListResponse{Organizations: []api.Organization{}})
+	mux.HandleFunc("/organizations", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(struct {
+			Organizations []foundrydb.Organization `json:"organizations"`
+		}{Organizations: []foundrydb.Organization{}})
 	})
 	_, cleanup := setupTestServer(t, mux)
 	defer cleanup()
@@ -27,15 +29,15 @@ func TestRunOrgList_Empty(t *testing.T) {
 }
 
 func TestRunOrgList_WithOrgs(t *testing.T) {
-	orgs := []api.Organization{
+	orgs := []foundrydb.Organization{
 		{ID: "org-abc123def456", Name: "Acme Corp", Slug: "acme", Role: "owner"},
 		{ID: "org-xyz789", Name: "Sideproject", Slug: "side", Role: "member"},
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/organizations/", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.OrganizationListResponse{
-			Organizations: orgs,
-		})
+	mux.HandleFunc("/organizations", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(struct {
+			Organizations []foundrydb.Organization `json:"organizations"`
+		}{Organizations: orgs})
 	})
 	_, cleanup := setupTestServer(t, mux)
 	defer cleanup()
@@ -59,15 +61,14 @@ func TestRunOrgList_WithOrgs(t *testing.T) {
 }
 
 func TestRunOrgList_CountMatchesOrgs(t *testing.T) {
-	// The total is always len(Organizations) since there is no TotalCount field
-	orgs := []api.Organization{
+	orgs := []foundrydb.Organization{
 		{ID: "org-abc123", Name: "Acme", Slug: "acme", Role: "owner"},
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/organizations/", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.OrganizationListResponse{
-			Organizations: orgs,
-		})
+	mux.HandleFunc("/organizations", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(struct {
+			Organizations []foundrydb.Organization `json:"organizations"`
+		}{Organizations: orgs})
 	})
 	_, cleanup := setupTestServer(t, mux)
 	defer cleanup()
@@ -82,18 +83,17 @@ func TestRunOrgList_CountMatchesOrgs(t *testing.T) {
 }
 
 func TestRunOrgList_ShortID(t *testing.T) {
-	// IDs longer than 8 chars should be truncated in the table
-	org := api.Organization{
+	org := foundrydb.Organization{
 		ID:   "org-abcdefghijklmnop",
 		Name: "Long ID Org",
 		Slug: "long",
 		Role: "admin",
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/organizations/", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.OrganizationListResponse{
-			Organizations: []api.Organization{org},
-		})
+	mux.HandleFunc("/organizations", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(struct {
+			Organizations []foundrydb.Organization `json:"organizations"`
+		}{Organizations: []foundrydb.Organization{org}})
 	})
 	_, cleanup := setupTestServer(t, mux)
 	defer cleanup()
@@ -102,7 +102,6 @@ func TestRunOrgList_ShortID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// The full ID should NOT appear; only the first 8 chars
 	if strings.Contains(out, "org-abcdefghijklmnop") {
 		t.Errorf("expected truncated ID, but found full ID in output: %q", out)
 	}
@@ -112,18 +111,17 @@ func TestRunOrgList_ShortID(t *testing.T) {
 }
 
 func TestRunOrgList_ShortIDUnder8(t *testing.T) {
-	// IDs shorter than or equal to 8 chars should not be truncated
-	org := api.Organization{
+	org := foundrydb.Organization{
 		ID:   "org-abc",
 		Name: "Short ID Org",
 		Slug: "short",
 		Role: "owner",
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/organizations/", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.OrganizationListResponse{
-			Organizations: []api.Organization{org},
-		})
+	mux.HandleFunc("/organizations", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(struct {
+			Organizations []foundrydb.Organization `json:"organizations"`
+		}{Organizations: []foundrydb.Organization{org}})
 	})
 	_, cleanup := setupTestServer(t, mux)
 	defer cleanup()
@@ -138,14 +136,14 @@ func TestRunOrgList_ShortIDUnder8(t *testing.T) {
 }
 
 func TestRunOrgList_JSONOut(t *testing.T) {
-	orgs := []api.Organization{
+	orgs := []foundrydb.Organization{
 		{ID: "org-abc123", Name: "Acme", Slug: "acme", Role: "owner"},
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/organizations/", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.OrganizationListResponse{
-			Organizations: orgs,
-		})
+	mux.HandleFunc("/organizations", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(struct {
+			Organizations []foundrydb.Organization `json:"organizations"`
+		}{Organizations: orgs})
 	})
 	_, cleanup := setupTestServer(t, mux)
 	defer cleanup()
@@ -157,14 +155,14 @@ func TestRunOrgList_JSONOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, `"organizations"`) {
-		t.Errorf("expected JSON output, got: %q", out)
+	if !strings.Contains(out, `"name"`) {
+		t.Errorf("expected JSON output with org fields, got: %q", out)
 	}
 }
 
 func TestRunOrgList_APIError(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/organizations/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/organizations", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	})
 	_, cleanup := setupTestServer(t, mux)

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anorph/foundrydb-cli/internal/api"
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 )
 
-func buildConnStringMux(svc api.Service, creds api.RevealPasswordResponse) *http.ServeMux {
+func buildConnStringMux(svc foundrydb.Service, creds foundrydb.RevealPasswordResponse) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/reveal-password") {
@@ -21,8 +21,8 @@ func buildConnStringMux(svc api.Service, creds api.RevealPasswordResponse) *http
 	return mux
 }
 
-func sampleCreds() api.RevealPasswordResponse {
-	return api.RevealPasswordResponse{
+func sampleCreds() foundrydb.RevealPasswordResponse {
+	return foundrydb.RevealPasswordResponse{
 		Username: "app_user",
 		Password: "s3cr3t",
 		Host:     "my-pg.db.foundrydb.com",
@@ -55,7 +55,7 @@ func TestRunConnectionString_URLFormat_PostgreSQL(t *testing.T) {
 
 func TestRunConnectionString_URLFormat_MySQL(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "mysql"
+	svc.DatabaseType = foundrydb.MySQL
 	creds := sampleCreds()
 	creds.Port = 3306
 
@@ -73,7 +73,7 @@ func TestRunConnectionString_URLFormat_MySQL(t *testing.T) {
 
 func TestRunConnectionString_URLFormat_MongoDB(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "mongodb"
+	svc.DatabaseType = foundrydb.MongoDB
 	creds := sampleCreds()
 	creds.Port = 27017
 
@@ -94,7 +94,7 @@ func TestRunConnectionString_URLFormat_MongoDB(t *testing.T) {
 
 func TestRunConnectionString_URLFormat_Valkey(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "valkey"
+	svc.DatabaseType = foundrydb.Valkey
 	creds := sampleCreds()
 	creds.Port = 6380
 
@@ -112,7 +112,7 @@ func TestRunConnectionString_URLFormat_Valkey(t *testing.T) {
 
 func TestRunConnectionString_URLFormat_Kafka(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "kafka"
+	svc.DatabaseType = foundrydb.Kafka
 	creds := sampleCreds()
 	creds.Port = 9093
 
@@ -130,7 +130,7 @@ func TestRunConnectionString_URLFormat_Kafka(t *testing.T) {
 
 func TestRunConnectionString_URLFormat_UnknownType(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "mssql"
+	svc.DatabaseType = foundrydb.MSSQL
 	creds := sampleCreds()
 	creds.Port = 1433
 
@@ -141,7 +141,6 @@ func TestRunConnectionString_URLFormat_UnknownType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Unknown types fall through to default with dbType as scheme
 	if !strings.Contains(out, "mssql://") {
 		t.Errorf("expected mssql:// scheme, got: %q", out)
 	}
@@ -168,7 +167,7 @@ func TestRunConnectionString_PSQLFormat(t *testing.T) {
 
 func TestRunConnectionString_PSQLFormat_WrongType(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "mysql"
+	svc.DatabaseType = foundrydb.MySQL
 	creds := sampleCreds()
 
 	_, cleanup := setupTestServer(t, buildConnStringMux(svc, creds))
@@ -185,7 +184,7 @@ func TestRunConnectionString_PSQLFormat_WrongType(t *testing.T) {
 
 func TestRunConnectionString_MySQLFormat(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "mysql"
+	svc.DatabaseType = foundrydb.MySQL
 	creds := sampleCreds()
 	creds.Port = 3306
 
@@ -219,7 +218,7 @@ func TestRunConnectionString_MySQLFormat_WrongType(t *testing.T) {
 
 func TestRunConnectionString_MongoshFormat(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "mongodb"
+	svc.DatabaseType = foundrydb.MongoDB
 	creds := sampleCreds()
 	creds.Port = 27017
 
@@ -253,7 +252,7 @@ func TestRunConnectionString_MongoshFormat_WrongType(t *testing.T) {
 
 func TestRunConnectionString_RedisCLIFormat(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "valkey"
+	svc.DatabaseType = foundrydb.Valkey
 	creds := sampleCreds()
 	creds.Port = 6380
 
@@ -309,7 +308,7 @@ func TestRunConnectionString_EnvFormat_PostgreSQL(t *testing.T) {
 
 func TestRunConnectionString_EnvFormat_MySQL(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "mysql"
+	svc.DatabaseType = foundrydb.MySQL
 	creds := sampleCreds()
 	creds.Port = 3306
 
@@ -327,7 +326,7 @@ func TestRunConnectionString_EnvFormat_MySQL(t *testing.T) {
 
 func TestRunConnectionString_EnvFormat_MongoDB(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "mongodb"
+	svc.DatabaseType = foundrydb.MongoDB
 	creds := sampleCreds()
 	creds.Port = 27017
 
@@ -345,7 +344,7 @@ func TestRunConnectionString_EnvFormat_MongoDB(t *testing.T) {
 
 func TestRunConnectionString_EnvFormat_Valkey(t *testing.T) {
 	svc := sampleService()
-	svc.DatabaseType = "valkey"
+	svc.DatabaseType = foundrydb.Valkey
 	creds := sampleCreds()
 	creds.Port = 6380
 
@@ -365,9 +364,8 @@ func TestRunConnectionString_EnvFormat_Valkey(t *testing.T) {
 }
 
 func TestRunConnectionString_EnvFormat_Kafka(t *testing.T) {
-	// Kafka uses the default DATABASE_URL path in printEnvFormat
 	svc := sampleService()
-	svc.DatabaseType = "kafka"
+	svc.DatabaseType = foundrydb.Kafka
 	creds := sampleCreds()
 	creds.Port = 9093
 
@@ -402,8 +400,8 @@ func TestRunConnectionString_InvalidFormat(t *testing.T) {
 func TestRunConnectionString_HostFromDNS(t *testing.T) {
 	// When creds.Host is empty, host should fall back to service DNS records
 	svc := sampleService()
-	svc.DNSRecords = []api.DNSRecord{
-		{FullDomain: "my-pg.db.foundrydb.com", Port: 5432},
+	svc.DNSRecords = []foundrydb.DNSRecord{
+		{FullDomain: "my-pg.db.foundrydb.com", RecordType: "A", Value: "1.2.3.4"},
 	}
 	creds := sampleCreds()
 	creds.Host = "" // force DNS fallback

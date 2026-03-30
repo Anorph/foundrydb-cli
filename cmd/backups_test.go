@@ -5,28 +5,33 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/anorph/foundrydb-cli/internal/api"
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 )
 
-func sampleBackups() []api.Backup {
-	return []api.Backup{
+func sampleBackups() []foundrydb.Backup {
+	size1 := int64(10 * 1024 * 1024) // 10 MB
+	return []foundrydb.Backup{
 		{
-			ID:        "bkp12345-0000-0000-0000-000000000000",
-			Type:      "full",
-			Status:    "completed",
-			SizeBytes: 10 * 1024 * 1024, // 10 MB
-			CreatedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC),
+			ID:         "bkp12345-0000-0000-0000-000000000000",
+			BackupType: foundrydb.BackupTypeFull,
+			Status:     foundrydb.BackupStatusCompleted,
+			SizeBytes:  &size1,
+			CreatedAt:  "2025-01-01T12:00:00Z",
 		},
 		{
-			ID:        "bkp99999-0000-0000-0000-000000000000",
-			Type:      "incremental",
-			Status:    "in_progress",
-			SizeBytes: 0,
-			CreatedAt: time.Date(2025, 1, 2, 12, 0, 0, 0, time.UTC),
+			ID:         "bkp99999-0000-0000-0000-000000000000",
+			BackupType: foundrydb.BackupTypeIncremental,
+			Status:     foundrydb.BackupStatus("in_progress"),
+			SizeBytes:  nil,
+			CreatedAt:  "2025-01-02T12:00:00Z",
 		},
 	}
+}
+
+// listBackupsResponse wraps backups for mock server responses.
+type listBackupsResponse struct {
+	Backups []foundrydb.Backup `json:"backups"`
 }
 
 func TestRunBackupsList_WithBackups(t *testing.T) {
@@ -36,7 +41,7 @@ func TestRunBackupsList_WithBackups(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/backups") {
-			json.NewEncoder(w).Encode(api.BackupListResponse{Backups: backups})
+			json.NewEncoder(w).Encode(listBackupsResponse{Backups: backups})
 			return
 		}
 		// Service lookup
@@ -72,7 +77,7 @@ func TestRunBackupsList_Empty(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/backups") {
-			json.NewEncoder(w).Encode(api.BackupListResponse{Backups: []api.Backup{}})
+			json.NewEncoder(w).Encode(listBackupsResponse{Backups: []foundrydb.Backup{}})
 			return
 		}
 		json.NewEncoder(w).Encode(svc)
@@ -96,7 +101,7 @@ func TestRunBackupsList_JSONOut(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/backups") {
-			json.NewEncoder(w).Encode(api.BackupListResponse{Backups: backups})
+			json.NewEncoder(w).Encode(listBackupsResponse{Backups: backups})
 			return
 		}
 		json.NewEncoder(w).Encode(svc)
@@ -111,14 +116,15 @@ func TestRunBackupsList_JSONOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, `"backups"`) {
-		t.Errorf("expected JSON output, got: %q", out)
+	// SDK Backup type uses "backup_type" field name
+	if !strings.Contains(out, `"backup_type"`) {
+		t.Errorf("expected JSON output with 'backup_type', got: %q", out)
 	}
 }
 
 func TestRunBackupsTrigger_Success(t *testing.T) {
 	svc := sampleService()
-	triggerResp := api.TriggerBackupResponse{ID: "bkp-new-001", Status: "pending"}
+	triggerResp := foundrydb.Backup{ID: "bkp-new-001", Status: foundrydb.BackupStatusPending}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +153,7 @@ func TestRunBackupsTrigger_Success(t *testing.T) {
 
 func TestRunBackupsTrigger_JSONOut(t *testing.T) {
 	svc := sampleService()
-	triggerResp := api.TriggerBackupResponse{ID: "bkp-new-001", Status: "pending"}
+	triggerResp := foundrydb.Backup{ID: "bkp-new-001", Status: foundrydb.BackupStatusPending}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {

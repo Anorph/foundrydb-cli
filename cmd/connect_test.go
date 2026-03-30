@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anorph/foundrydb-cli/internal/api"
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 )
 
 func TestDefaultPort(t *testing.T) {
@@ -33,10 +33,11 @@ func TestDefaultPort(t *testing.T) {
 }
 
 func TestGetHostPort_FromDNS(t *testing.T) {
-	svc := &api.Service{
-		Name: "my-pg",
-		DNSRecords: []api.DNSRecord{
-			{FullDomain: "my-pg.db.foundrydb.com", Port: 5432},
+	svc := &foundrydb.Service{
+		Name:         "my-pg",
+		DatabaseType: foundrydb.PostgreSQL,
+		DNSRecords: []foundrydb.DNSRecord{
+			{FullDomain: "my-pg.db.foundrydb.com", RecordType: "A", Value: "1.2.3.4"},
 		},
 	}
 	host, port, err := getHostPort(svc)
@@ -46,40 +47,20 @@ func TestGetHostPort_FromDNS(t *testing.T) {
 	if host != "my-pg.db.foundrydb.com" {
 		t.Errorf("expected DNS domain, got %q", host)
 	}
-	if port != 5432 {
-		t.Errorf("expected port 5432, got %d", port)
-	}
-}
-
-func TestGetHostPort_FromNodes(t *testing.T) {
-	svc := &api.Service{
-		Name:         "my-pg",
-		DatabaseType: "postgresql",
-		Nodes: []api.Node{
-			{ID: "node-abc", Role: "primary", IP: "10.0.0.5"},
-		},
-	}
-	host, port, err := getHostPort(svc)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if host != "10.0.0.5" {
-		t.Errorf("expected node IP, got %q", host)
-	}
+	// Port comes from defaultPort since SDK DNSRecord has no Port field
 	if port != 5432 {
 		t.Errorf("expected default postgresql port 5432, got %d", port)
 	}
 }
 
-func TestGetHostPort_NoRecordsNoNodes(t *testing.T) {
-	svc := &api.Service{
+func TestGetHostPort_NoRecords(t *testing.T) {
+	svc := &foundrydb.Service{
 		Name:       "my-pg",
 		DNSRecords: nil,
-		Nodes:      nil,
 	}
 	_, _, err := getHostPort(svc)
 	if err == nil {
-		t.Fatal("expected error when no DNS records or nodes")
+		t.Fatal("expected error when no DNS records")
 	}
 	if !strings.Contains(err.Error(), "no DNS records") {
 		t.Errorf("expected 'no DNS records' error, got: %v", err)
@@ -108,7 +89,7 @@ func TestLaunchShell_UnknownType(t *testing.T) {
 
 func TestRunConnect_ServiceNotRunning(t *testing.T) {
 	svc := sampleService()
-	svc.Status = "provisioning"
+	svc.Status = foundrydb.ServiceStatus("provisioning")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
@@ -128,9 +109,8 @@ func TestRunConnect_ServiceNotRunning(t *testing.T) {
 
 func TestRunConnect_NoHostOrNodes(t *testing.T) {
 	svc := sampleService()
-	// No DNS records and no nodes - should get a host error
+	// No DNS records - should get a host error
 	svc.DNSRecords = nil
-	svc.Nodes = nil
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +121,7 @@ func TestRunConnect_NoHostOrNodes(t *testing.T) {
 
 	_, err := executeCommand(t, "connect", svc.ID)
 	if err == nil {
-		t.Fatal("expected error when service has no DNS records or nodes")
+		t.Fatal("expected error when service has no DNS records")
 	}
 	if !strings.Contains(err.Error(), "no DNS records") {
 		t.Errorf("expected 'no DNS records' error, got: %v", err)
@@ -151,6 +131,9 @@ func TestRunConnect_NoHostOrNodes(t *testing.T) {
 func TestRunConnect_ServiceNotFound(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	})
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 	})
 	_, cleanup := setupTestServer(t, mux)

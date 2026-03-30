@@ -3,6 +3,7 @@ module github.com/anorph/foundrydb-cli
 go 1.26.1
 
 require (
+	github.com/anorph/foundrydb-sdk-go v0.0.0-20260330180634-0f29f55547fe // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/displaywidth v0.10.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.6.0 // indirect

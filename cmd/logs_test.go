@@ -5,14 +5,12 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/anorph/foundrydb-cli/internal/api"
 )
 
 func TestRunLogs_Success(t *testing.T) {
 	svc := sampleService()
-	taskResp := api.RequestLogsResponse{TaskID: "task-abc123"}
-	logsResp := api.LogsResponse{Status: "completed", Logs: "line1\nline2\nline3"}
+	taskResp := requestLogsResponse{TaskID: "task-abc123"}
+	logsResp := logsResponse{Status: "completed", Logs: "line1\nline2\nline3"}
 
 	pollCount := 0
 	mux := http.NewServeMux()
@@ -44,8 +42,8 @@ func TestRunLogs_Success(t *testing.T) {
 
 func TestRunLogs_JSONOut(t *testing.T) {
 	svc := sampleService()
-	taskResp := api.RequestLogsResponse{TaskID: "task-abc123"}
-	logsResp := api.LogsResponse{Status: "done", Logs: "line1\nline2"}
+	taskResp := requestLogsResponse{TaskID: "task-abc123"}
+	logsResp := logsResponse{Status: "done", Logs: "line1\nline2"}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
@@ -76,8 +74,8 @@ func TestRunLogs_JSONOut(t *testing.T) {
 func TestRunLogs_SuccessStatus(t *testing.T) {
 	// Test that "success" status (not just "completed"/"done") is accepted
 	svc := sampleService()
-	taskResp := api.RequestLogsResponse{TaskID: "task-xyz"}
-	logsResp := api.LogsResponse{Status: "success", Logs: "success log output"}
+	taskResp := requestLogsResponse{TaskID: "task-xyz"}
+	logsResp := logsResponse{Status: "success", Logs: "success log output"}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
@@ -104,8 +102,8 @@ func TestRunLogs_SuccessStatus(t *testing.T) {
 
 func TestRunLogs_Failed(t *testing.T) {
 	svc := sampleService()
-	taskResp := api.RequestLogsResponse{TaskID: "task-fail"}
-	logsResp := api.LogsResponse{Status: "failed"}
+	taskResp := requestLogsResponse{TaskID: "task-fail"}
+	logsResp := logsResponse{Status: "failed"}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +149,7 @@ func TestRunLogs_RequestError(t *testing.T) {
 
 func TestRunLogs_PollError(t *testing.T) {
 	svc := sampleService()
-	taskResp := api.RequestLogsResponse{TaskID: "task-poll-error"}
+	taskResp := requestLogsResponse{TaskID: "task-poll-error"}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
@@ -178,8 +176,8 @@ func TestRunLogs_PollError(t *testing.T) {
 
 func TestRunLogs_WithLinesFlag(t *testing.T) {
 	svc := sampleService()
-	taskResp := api.RequestLogsResponse{TaskID: "task-lines"}
-	logsResp := api.LogsResponse{Status: "completed", Logs: "line1"}
+	taskResp := requestLogsResponse{TaskID: "task-lines"}
+	logsResp := logsResponse{Status: "completed", Logs: "line1"}
 
 	var capturedURL string
 	mux := http.NewServeMux()

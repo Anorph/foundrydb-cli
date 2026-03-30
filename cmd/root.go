@@ -5,18 +5,18 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/anorph/foundrydb-cli/internal/api"
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	cfgFile string
-	apiURL  string
+	cfgFile  string
+	apiURL   string
 	username string
 	password string
-	orgID   string
-	jsonOut bool
+	orgID    string
+	jsonOut  bool
 )
 
 // rootCmd is the base command
@@ -88,7 +88,7 @@ func initConfig() {
 }
 
 // newClient creates an API client from current config/flags
-func newClient() *api.Client {
+func newClient() *foundrydb.Client {
 	url := viper.GetString("api_url")
 	user := viper.GetString("username")
 	pass := viper.GetString("password")
@@ -108,9 +108,12 @@ func newClient() *api.Client {
 		org = orgID
 	}
 
-	client := api.NewClient(url, user, pass)
-	client.OrgID = org
-	return client
+	return foundrydb.New(foundrydb.Config{
+		APIURL:   url,
+		Username: user,
+		Password: pass,
+		OrgID:    org,
+	})
 }
 
 // getConfigPath returns the path to the config file

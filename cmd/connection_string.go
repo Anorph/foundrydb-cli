@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 
@@ -40,13 +41,14 @@ func runConnectionString(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
 	database, _ := cmd.Flags().GetString("database")
 
-	creds, err := client.RevealPassword(svc.ID, connectUser)
+	ctx := context.Background()
+	creds, err := client.RevealPassword(ctx, svc.ID, connectUser)
 	if err != nil {
 		return fmt.Errorf("reveal password for user %q: %w", connectUser, err)
 	}
 
 	host := creds.Host
-	port := creds.Port
+	port := int(creds.Port)
 	if host == "" {
 		h, p, hErr := getHostPort(svc)
 		if hErr != nil {
@@ -59,36 +61,38 @@ func runConnectionString(cmd *cobra.Command, args []string) error {
 		database = creds.Database
 	}
 
+	dbType := string(svc.DatabaseType)
+
 	switch format {
 	case "url":
-		fmt.Println(buildURL(svc.DatabaseType, host, port, connectUser, creds.Password, database))
+		fmt.Println(buildURL(dbType, host, port, connectUser, creds.Password, database))
 
 	case "env":
-		printEnvFormat(svc.DatabaseType, host, port, connectUser, creds.Password, database)
+		printEnvFormat(dbType, host, port, connectUser, creds.Password, database)
 
 	case "psql":
-		if svc.DatabaseType != "postgresql" {
+		if dbType != "postgresql" {
 			return fmt.Errorf("psql format is only valid for PostgreSQL services")
 		}
 		fmt.Printf("PGPASSWORD=%s psql \"host=%s port=%d user=%s dbname=%s sslmode=require\"\n",
 			shellEscape(creds.Password), host, port, connectUser, database)
 
 	case "mysql":
-		if svc.DatabaseType != "mysql" {
+		if dbType != "mysql" {
 			return fmt.Errorf("mysql format is only valid for MySQL services")
 		}
 		fmt.Printf("mysql -h %s -P %d -u %s -p'%s' --ssl-mode=REQUIRED %s\n",
 			host, port, connectUser, creds.Password, database)
 
 	case "mongosh":
-		if svc.DatabaseType != "mongodb" {
+		if dbType != "mongodb" {
 			return fmt.Errorf("mongosh format is only valid for MongoDB services")
 		}
 		fmt.Printf("mongosh \"mongodb://%s:%s@%s:%d/%s?tls=true&tlsAllowInvalidCertificates=true\"\n",
 			connectUser, url.QueryEscape(creds.Password), host, port, database)
 
 	case "redis-cli":
-		if svc.DatabaseType != "valkey" {
+		if dbType != "valkey" {
 			return fmt.Errorf("redis-cli format is only valid for Valkey services")
 		}
 		fmt.Printf("redis-cli -h %s -p %d --tls --user %s --pass '%s' --insecure\n",

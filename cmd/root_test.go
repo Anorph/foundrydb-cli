@@ -1,8 +1,13 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/spf13/viper"
 )
 
@@ -13,32 +18,55 @@ func TestNewClient_FromViper(t *testing.T) {
 	password = ""
 	orgID = ""
 
-	viper.Set("api_url", "http://example.com")
+	svc := sampleService()
+	mux := http.NewServeMux()
+	var capturedAuth string
+	var capturedOrgID string
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
+		capturedAuth = r.Header.Get("Authorization")
+		capturedOrgID = r.Header.Get("X-Active-Org-ID")
+		json.NewEncoder(w).Encode(foundrydb.ListServicesResponse{Services: []foundrydb.Service{svc}})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	viper.Set("api_url", srv.URL)
 	viper.Set("username", "alice")
 	viper.Set("password", "secret")
 	viper.Set("org", "my-org")
 	defer viper.Reset()
 
 	client := newClient()
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
 
-	if client.BaseURL != "http://example.com" {
-		t.Errorf("expected BaseURL 'http://example.com', got %q", client.BaseURL)
+	// Verify credentials are used by making a call
+	_, err := client.ListServices(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if client.Username != "alice" {
-		t.Errorf("expected Username 'alice', got %q", client.Username)
+
+	// Basic auth should be set
+	if capturedAuth == "" {
+		t.Error("expected Authorization header to be sent")
 	}
-	if client.Password != "secret" {
-		t.Errorf("expected Password 'secret', got %q", client.Password)
-	}
-	if client.OrgID != "my-org" {
-		t.Errorf("expected OrgID 'my-org', got %q", client.OrgID)
-	}
-	if client.HTTPClient == nil {
-		t.Error("expected HTTPClient to be non-nil")
+	if capturedOrgID != "my-org" {
+		t.Errorf("expected OrgID 'my-org', got %q", capturedOrgID)
 	}
 }
 
 func TestNewClient_FlagOverridesViper(t *testing.T) {
+	svc := sampleService()
+	mux := http.NewServeMux()
+	var capturedOrgID string
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
+		capturedOrgID = r.Header.Get("X-Active-Org-ID")
+		json.NewEncoder(w).Encode(foundrydb.ListServicesResponse{Services: []foundrydb.Service{svc}})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
 	// Set viper values first
 	viper.Set("api_url", "http://viper-url.com")
 	viper.Set("username", "viper-user")
@@ -47,7 +75,7 @@ func TestNewClient_FlagOverridesViper(t *testing.T) {
 	defer viper.Reset()
 
 	// Flag overrides
-	apiURL = "http://flag-url.com"
+	apiURL = srv.URL
 	username = "flag-user"
 	password = "flag-pass"
 	orgID = "flag-org"
@@ -59,43 +87,29 @@ func TestNewClient_FlagOverridesViper(t *testing.T) {
 	}()
 
 	client := newClient()
+	_, err := client.ListServices(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	if client.BaseURL != "http://flag-url.com" {
-		t.Errorf("expected flag URL to override viper, got %q", client.BaseURL)
-	}
-	if client.Username != "flag-user" {
-		t.Errorf("expected flag username to override viper, got %q", client.Username)
-	}
-	if client.Password != "flag-pass" {
-		t.Errorf("expected flag password to override viper, got %q", client.Password)
-	}
-	if client.OrgID != "flag-org" {
-		t.Errorf("expected flag org to override viper, got %q", client.OrgID)
+	if capturedOrgID != "flag-org" {
+		t.Errorf("expected flag org 'flag-org' to override viper, got %q", capturedOrgID)
 	}
 }
 
 func TestNewClient_Defaults(t *testing.T) {
-	// With nothing set, defaults from initConfig should apply.
-	// Reset everything.
+	// With nothing set, newClient() should return a non-nil client.
 	apiURL = ""
 	username = ""
 	password = ""
 	orgID = ""
 	viper.Reset()
-	// Apply defaults as initConfig does
 	viper.SetDefault("api_url", "https://api.foundrydb.com")
 	viper.SetDefault("username", "admin")
 
 	client := newClient()
-
-	if client.BaseURL != "https://api.foundrydb.com" {
-		t.Errorf("expected default BaseURL, got %q", client.BaseURL)
-	}
-	if client.Username != "admin" {
-		t.Errorf("expected default username 'admin', got %q", client.Username)
-	}
-	if client.OrgID != "" {
-		t.Errorf("expected empty OrgID by default, got %q", client.OrgID)
+	if client == nil {
+		t.Error("expected non-nil client with defaults")
 	}
 }
 

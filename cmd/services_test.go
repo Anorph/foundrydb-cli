@@ -10,9 +10,8 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/anorph/foundrydb-cli/internal/api"
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/spf13/viper"
 )
 
@@ -69,32 +68,46 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 }
 
 // sampleService returns a representative Service for use in tests.
-func sampleService() api.Service {
-	return api.Service{
+func sampleService() foundrydb.Service {
+	return foundrydb.Service{
 		ID:            "abc12345-0000-0000-0000-000000000000",
 		Name:          "my-pg",
-		DatabaseType:  "postgresql",
+		DatabaseType:  foundrydb.PostgreSQL,
 		Version:       "17",
-		Status:        "running",
+		Status:        foundrydb.ServiceStatus("running"),
 		PlanName:      "tier-2",
 		StorageSizeGB: 50,
-		StorageTier:   "maxiops",
+		StorageTier:   foundrydb.StorageTierMaxIOPS,
 		Zone:          "se-sto1",
-		CreatedAt:     time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC),
-		UpdatedAt:     time.Date(2025, 1, 2, 12, 0, 0, 0, time.UTC),
+		CreatedAt:     "2025-01-01T12:00:00Z",
+		UpdatedAt:     "2025-01-02T12:00:00Z",
 	}
+}
+
+// listServicesResponse wraps services for mock server responses.
+type listServicesResponse struct {
+	Services []foundrydb.Service `json:"services"`
+}
+
+// newClientWithURL creates an SDK client pointing at the given URL for tests.
+func newClientWithURL(url string) *foundrydb.Client {
+	return foundrydb.New(foundrydb.Config{
+		APIURL:   url,
+		Username: "test",
+		Password: "test",
+	})
 }
 
 // -- services list ------------------------------------------------------------
 
 func TestRunServicesList_Empty(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		json.NewEncoder(w).Encode(api.ServiceListResponse{Services: []api.Service{}})
+		json.NewEncoder(w).Encode(listServicesResponse{Services: []foundrydb.Service{}})
 	})
 	_, cleanup := setupTestServer(t, mux)
 	defer cleanup()
@@ -111,19 +124,13 @@ func TestRunServicesList_Empty(t *testing.T) {
 func TestRunServicesList_WithServices(t *testing.T) {
 	svc := sampleService()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		// Only match the list endpoint (no trailing path segment)
-		if r.URL.Path != "/managed-services/" {
-			http.NotFound(w, r)
-			return
-		}
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		json.NewEncoder(w).Encode(api.ServiceListResponse{
-			Services:   []api.Service{svc},
-			Total: 1,
+		json.NewEncoder(w).Encode(listServicesResponse{
+			Services: []foundrydb.Service{svc},
 		})
 	})
 	_, cleanup := setupTestServer(t, mux)
@@ -147,41 +154,11 @@ func TestRunServicesList_WithServices(t *testing.T) {
 	}
 }
 
-func TestRunServicesList_TotalCountFallback(t *testing.T) {
-	// When TotalCount is 0, fall back to len(Services)
-	svc := sampleService()
-	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/managed-services/" {
-			http.NotFound(w, r)
-			return
-		}
-		json.NewEncoder(w).Encode(api.ServiceListResponse{
-			Services:   []api.Service{svc},
-			Total: 0, // deliberately 0 to trigger fallback
-		})
-	})
-	_, cleanup := setupTestServer(t, mux)
-	defer cleanup()
-
-	out, err := executeCommand(t, "services", "list")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "Total: 1") {
-		t.Errorf("expected total count fallback to 1, got: %q", out)
-	}
-}
-
 func TestRunServicesList_JSONOut(t *testing.T) {
 	svc := sampleService()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/managed-services/" {
-			http.NotFound(w, r)
-			return
-		}
-		json.NewEncoder(w).Encode(api.ServiceListResponse{Services: []api.Service{svc}, Total: 1})
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(listServicesResponse{Services: []foundrydb.Service{svc}})
 	})
 	_, cleanup := setupTestServer(t, mux)
 	defer cleanup()
@@ -193,14 +170,15 @@ func TestRunServicesList_JSONOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, `"services"`) {
-		t.Errorf("expected JSON output, got: %q", out)
+	// SDK encodes Service.ID as "uuid"
+	if !strings.Contains(out, `"uuid"`) {
+		t.Errorf("expected JSON output with 'uuid' field, got: %q", out)
 	}
 }
 
 func TestRunServicesList_APIError(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	})
 	_, cleanup := setupTestServer(t, mux)
@@ -218,11 +196,6 @@ func TestRunServicesGet_ByID(t *testing.T) {
 	svc := sampleService()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		// Return 404 for list, 200 for direct ID lookup
-		if r.URL.Path == "/managed-services/" {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
 		json.NewEncoder(w).Encode(svc)
 	})
 	_, cleanup := setupTestServer(t, mux)
@@ -249,20 +222,13 @@ func TestRunServicesGet_ByID(t *testing.T) {
 	}
 }
 
-func TestRunServicesGet_WithDNSAndNodes(t *testing.T) {
+func TestRunServicesGet_WithDNS(t *testing.T) {
 	svc := sampleService()
-	svc.DNSRecords = []api.DNSRecord{
-		{FullDomain: "my-pg.db.foundrydb.com", Port: 5432, Type: "primary"},
-	}
-	svc.Nodes = []api.Node{
-		{ID: "node1234-5678-0000-0000-000000000000", Role: "primary", IP: "10.0.0.2"},
+	svc.DNSRecords = []foundrydb.DNSRecord{
+		{FullDomain: "my-pg.db.foundrydb.com", RecordType: "A", Value: "1.2.3.4"},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/managed-services/" {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
 		json.NewEncoder(w).Encode(svc)
 	})
 	_, cleanup := setupTestServer(t, mux)
@@ -278,99 +244,12 @@ func TestRunServicesGet_WithDNSAndNodes(t *testing.T) {
 	if !strings.Contains(out, "my-pg.db.foundrydb.com") {
 		t.Errorf("expected DNS domain in output, got: %q", out)
 	}
-	if !strings.Contains(out, "Nodes") {
-		t.Errorf("expected Nodes section, got: %q", out)
-	}
-	if !strings.Contains(out, "10.0.0.2") {
-		t.Errorf("expected node IP in output, got: %q", out)
-	}
-}
-
-func TestRunServicesGet_DNSRecordWithPortOnly(t *testing.T) {
-	// DNS record with port but no type
-	svc := sampleService()
-	svc.DNSRecords = []api.DNSRecord{
-		{FullDomain: "my-pg.db.foundrydb.com", Port: 5432, Type: ""},
-	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/managed-services/" {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
-		json.NewEncoder(w).Encode(svc)
-	})
-	_, cleanup := setupTestServer(t, mux)
-	defer cleanup()
-
-	out, err := executeCommand(t, "services", "get", svc.ID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "my-pg.db.foundrydb.com:5432") {
-		t.Errorf("expected domain:port in output, got: %q", out)
-	}
-}
-
-func TestRunServicesGet_DNSRecordNoPort(t *testing.T) {
-	// DNS record with no port
-	svc := sampleService()
-	svc.DNSRecords = []api.DNSRecord{
-		{FullDomain: "my-pg.db.foundrydb.com", Port: 0, Type: ""},
-	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/managed-services/" {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
-		json.NewEncoder(w).Encode(svc)
-	})
-	_, cleanup := setupTestServer(t, mux)
-	defer cleanup()
-
-	out, err := executeCommand(t, "services", "get", svc.ID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "my-pg.db.foundrydb.com") {
-		t.Errorf("expected domain in output, got: %q", out)
-	}
-}
-
-func TestRunServicesGet_NodeWithoutIP(t *testing.T) {
-	svc := sampleService()
-	svc.Nodes = []api.Node{
-		{ID: "node1234-5678-0000-0000-000000000000", Role: "primary", IP: ""},
-	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/managed-services/" {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
-		json.NewEncoder(w).Encode(svc)
-	})
-	_, cleanup := setupTestServer(t, mux)
-	defer cleanup()
-
-	out, err := executeCommand(t, "services", "get", svc.ID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "primary") {
-		t.Errorf("expected role in output, got: %q", out)
-	}
 }
 
 func TestRunServicesGet_JSONOut(t *testing.T) {
 	svc := sampleService()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/managed-services/" {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
 		json.NewEncoder(w).Encode(svc)
 	})
 	_, cleanup := setupTestServer(t, mux)
@@ -383,8 +262,8 @@ func TestRunServicesGet_JSONOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, `"id"`) {
-		t.Errorf("expected JSON output, got: %q", out)
+	if !strings.Contains(out, `"uuid"`) {
+		t.Errorf("expected JSON output with 'uuid' field, got: %q", out)
 	}
 }
 
@@ -393,7 +272,7 @@ func TestRunServicesGet_JSONOut(t *testing.T) {
 func TestRunServicesCreate_Success(t *testing.T) {
 	svc := sampleService()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(svc)
@@ -429,16 +308,7 @@ func TestRunServicesCreate_MissingName(t *testing.T) {
 	_, cleanup := setupTestServer(t, mux)
 	defer cleanup()
 
-	// We cannot supply name interactively in a test. Pass type but no name
-	// and rely on Scanln returning "" -> error.
-	// We override stdin to /dev/null to ensure blank input.
-	// The easiest approach is: pass an empty name to a command that validates it.
-	// Since Scanln won't block (stdin is /dev/null in CI), we just check the path
-	// by calling the function directly.
 	err := runServicesCreate(servicesCreateCmd, []string{})
-	// err may be nil if Scanln reads something; what we care about is that when
-	// name is empty after prompting the function returns an error.
-	// We test the function with a prepared flag set instead.
 	_ = err
 }
 
@@ -449,7 +319,7 @@ func TestRunServicesCreate_InvalidType(t *testing.T) {
 
 	_, err := executeCommand(t, "services", "create",
 		"--name", "my-db",
-		"--type", "oracle",  // invalid
+		"--type", "oracle",
 		"--version", "19",
 	)
 	if err == nil {
@@ -464,7 +334,7 @@ func TestRunServicesCreate_WithAllowedCIDRs(t *testing.T) {
 	svc := sampleService()
 	var capturedBody []byte
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			var buf bytes.Buffer
 			buf.ReadFrom(r.Body)
@@ -493,11 +363,10 @@ func TestRunServicesCreate_WithAllowedCIDRs(t *testing.T) {
 }
 
 func TestRunServicesCreate_DefaultVersion(t *testing.T) {
-	// When version is supplied on the CLI, it should be used directly (no prompt).
 	svc := sampleService()
 	var capturedBody []byte
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			var buf bytes.Buffer
 			buf.ReadFrom(r.Body)
@@ -527,7 +396,7 @@ func TestRunServicesCreate_DefaultVersion(t *testing.T) {
 func TestRunServicesCreate_JSONOut(t *testing.T) {
 	svc := sampleService()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(svc)
@@ -549,14 +418,14 @@ func TestRunServicesCreate_JSONOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, `"id"`) {
-		t.Errorf("expected JSON output, got: %q", out)
+	if !strings.Contains(out, `"uuid"`) {
+		t.Errorf("expected JSON output with 'uuid' field, got: %q", out)
 	}
 }
 
 func TestRunServicesCreate_APIError(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 	})
 	_, cleanup := setupTestServer(t, mux)
@@ -632,7 +501,7 @@ func TestResolveService_ByID_Success(t *testing.T) {
 	srv, cleanup := setupTestServer(t, mux)
 	defer cleanup()
 
-	client := api.NewClient(srv.URL, "test", "test")
+	client := newClientWithURL(srv.URL)
 	result, err := resolveService(client, svc.ID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -646,18 +515,19 @@ func TestResolveService_ByName_Success(t *testing.T) {
 	svc := sampleService()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
-		// Return 404 for direct ID lookup (which uses name as path), 200 for list
 		if r.URL.Path == "/managed-services/my-pg" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		// List endpoint
-		json.NewEncoder(w).Encode(api.ServiceListResponse{Services: []api.Service{svc}})
+		json.NewEncoder(w).Encode(listServicesResponse{Services: []foundrydb.Service{svc}})
+	})
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(listServicesResponse{Services: []foundrydb.Service{svc}})
 	})
 	srv, cleanup := setupTestServer(t, mux)
 	defer cleanup()
 
-	client := api.NewClient(srv.URL, "test", "test")
+	client := newClientWithURL(srv.URL)
 	result, err := resolveService(client, "my-pg")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -674,12 +544,15 @@ func TestResolveService_ByName_NotFound(t *testing.T) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		json.NewEncoder(w).Encode(api.ServiceListResponse{Services: []api.Service{}})
+		json.NewEncoder(w).Encode(listServicesResponse{Services: []foundrydb.Service{}})
+	})
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(listServicesResponse{Services: []foundrydb.Service{}})
 	})
 	srv, cleanup := setupTestServer(t, mux)
 	defer cleanup()
 
-	client := api.NewClient(srv.URL, "test", "test")
+	client := newClientWithURL(srv.URL)
 	_, err := resolveService(client, "does-not-exist")
 	if err == nil {
 		t.Fatal("expected error for non-existent service")
@@ -700,12 +573,15 @@ func TestResolveService_ByName_MultipleMatches(t *testing.T) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		json.NewEncoder(w).Encode(api.ServiceListResponse{Services: []api.Service{svc1, svc2}})
+		json.NewEncoder(w).Encode(listServicesResponse{Services: []foundrydb.Service{svc1, svc2}})
+	})
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(listServicesResponse{Services: []foundrydb.Service{svc1, svc2}})
 	})
 	srv, cleanup := setupTestServer(t, mux)
 	defer cleanup()
 
-	client := api.NewClient(srv.URL, "test", "test")
+	client := newClientWithURL(srv.URL)
 	_, err := resolveService(client, "my-pg")
 	if err == nil {
 		t.Fatal("expected error for multiple matches")
@@ -720,10 +596,13 @@ func TestResolveService_ListError(t *testing.T) {
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 	})
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "server error", http.StatusInternalServerError)
+	})
 	srv, cleanup := setupTestServer(t, mux)
 	defer cleanup()
 
-	client := api.NewClient(srv.URL, "test", "test")
+	client := newClientWithURL(srv.URL)
 	_, err := resolveService(client, "some-name")
 	if err == nil {
 		t.Fatal("expected error when both ID lookup and list fail")
@@ -736,8 +615,6 @@ func TestResolveService_ListError(t *testing.T) {
 // -- formatStatus -------------------------------------------------------------
 
 func TestFormatStatus(t *testing.T) {
-	// formatStatus is a passthrough - the API returns statuses as-is (e.g. PascalCase)
-	// and the function displays them without transformation.
 	tests := []struct {
 		input string
 	}{
@@ -800,10 +677,6 @@ func TestPrintJSON(t *testing.T) {
 		Value int    `json:"value"`
 	}
 	p := payload{Key: "hello", Value: 42}
-
-	// Capture output via a bytes.Buffer by temporarily replacing os.Stdout
-	// We call printJSON directly and capture its fmt.Println output.
-	// The simplest approach: just verify no error and the function returns nil.
 	err := printJSON(p)
 	if err != nil {
 		t.Errorf("printJSON returned error: %v", err)

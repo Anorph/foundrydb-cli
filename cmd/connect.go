@@ -1,12 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 
-	"github.com/anorph/foundrydb-cli/internal/api"
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +37,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if !strings.EqualFold(svc.Status, "running") {
+	if !strings.EqualFold(string(svc.Status), "running") {
 		return fmt.Errorf("service %q is not running (status: %s)", svc.Name, svc.Status)
 	}
 
@@ -51,30 +52,29 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	connectDB, _ := cmd.Flags().GetString("database")
 
 	if connectUser == "" {
-		users, usersErr := client.ListUsers(svc.ID)
-		if usersErr != nil || len(users.Users) == 0 {
+		ctx := context.Background()
+		users, usersErr := client.ListUsers(ctx, svc.ID)
+		if usersErr != nil || len(users) == 0 {
 			return fmt.Errorf("could not determine a user to connect with; use --user to specify one")
 		}
-		connectUser = users.Users[0].Username
+		connectUser = users[0].Username
 	}
 
 	// Reveal the password
-	creds, err := client.RevealPassword(svc.ID, connectUser)
+	ctx := context.Background()
+	creds, err := client.RevealPassword(ctx, svc.ID, connectUser)
 	if err != nil {
 		return fmt.Errorf("reveal password for user %q: %w", connectUser, err)
 	}
 
 	fmt.Printf("Connecting to %s service %q as %s...\n\n", svc.DatabaseType, svc.Name, connectUser)
 
-	return launchShell(svc.DatabaseType, host, port, connectUser, creds.Password, connectDB)
+	return launchShell(string(svc.DatabaseType), host, port, connectUser, creds.Password, connectDB)
 }
 
-func getHostPort(svc *api.Service) (string, int, error) {
+func getHostPort(svc *foundrydb.Service) (string, int, error) {
 	if len(svc.DNSRecords) > 0 {
-		return svc.DNSRecords[0].FullDomain, svc.DNSRecords[0].Port, nil
-	}
-	if len(svc.Nodes) > 0 {
-		return svc.Nodes[0].IP, defaultPort(svc.DatabaseType), nil
+		return svc.DNSRecords[0].FullDomain, defaultPort(string(svc.DatabaseType)), nil
 	}
 	return "", 0, fmt.Errorf("service %q has no DNS records or nodes", svc.Name)
 }

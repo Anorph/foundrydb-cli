@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
 
+	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
@@ -79,13 +81,14 @@ func runAuthLogin(cmd *cobra.Command, args []string) error {
 		loginPass = string(passBytes)
 	}
 
-	// Verify credentials by calling the API
-	client := newClient()
-	client.BaseURL = loginURL
-	client.Username = loginUser
-	client.Password = loginPass
-
-	_, err := client.ListServices()
+	// Verify credentials by calling the API with the supplied values
+	client := foundrydb.New(foundrydb.Config{
+		APIURL:   loginURL,
+		Username: loginUser,
+		Password: loginPass,
+	})
+	ctx := context.Background()
+	_, err := client.ListServices(ctx)
 	if err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
@@ -146,7 +149,8 @@ func runAuthStatus(cmd *cobra.Command, args []string) error {
 
 	// Test current credentials
 	client := newClient()
-	_, apiErr := client.ListServices()
+	ctx := context.Background()
+	_, apiErr := client.ListServices(ctx)
 
 	fmt.Printf("Config file: %s\n", configPath)
 	fmt.Printf("API URL:     %s\n", currentURL)

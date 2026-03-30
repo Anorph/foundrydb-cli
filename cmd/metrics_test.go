@@ -5,17 +5,15 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/anorph/foundrydb-cli/internal/api"
 )
 
 func TestRunMetrics_Success(t *testing.T) {
 	svc := sampleService()
-	metricsResp := api.MetricsResponse{
+	metricsResp := metricsResponse{
 		ServiceID:    svc.ID,
 		DatabaseType: "postgresql",
 		Timestamp:    "2025-01-01T12:00:00Z",
-		Metrics: api.MetricsData{
+		Metrics: metricsData{
 			CPUUsagePercent:           42.5,
 			MemoryUsagePercent:        60.0,
 			DiskUsagePercent:          15.3,
@@ -62,9 +60,9 @@ func TestRunMetrics_Success(t *testing.T) {
 
 func TestRunMetrics_JSONOut(t *testing.T) {
 	svc := sampleService()
-	metricsResp := api.MetricsResponse{
+	metricsResp := metricsResponse{
 		ServiceID: svc.ID,
-		Metrics:   api.MetricsData{CPUUsagePercent: 25.0},
+		Metrics:   metricsData{CPUUsagePercent: 25.0},
 	}
 
 	mux := http.NewServeMux()
@@ -112,6 +110,9 @@ func TestRunMetrics_APIError(t *testing.T) {
 func TestRunMetrics_ServiceNotFound(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/managed-services/", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	})
+	mux.HandleFunc("/managed-services", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 	})
 	_, cleanup := setupTestServer(t, mux)
