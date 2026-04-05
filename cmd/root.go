@@ -62,6 +62,7 @@ func init() {
 	rootCmd.AddCommand(connectionStringCmd)
 	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(metricsCmd)
+	rootCmd.AddCommand(presetsCmd)
 }
 
 func initConfig() {

@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -11,6 +14,7 @@ import (
 	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var servicesCmd = &cobra.Command{
@@ -53,6 +57,11 @@ func init() {
 	servicesCreateCmd.Flags().Int("storage-size", 50, "Storage size in GB")
 	servicesCreateCmd.Flags().String("storage-tier", "maxiops", "Storage tier: standard or maxiops")
 	servicesCreateCmd.Flags().StringSlice("allowed-cidrs", []string{}, "Allowed CIDR ranges")
+	servicesCreateCmd.Flags().String("preset", "", "Service preset for AI agent workloads (e.g. ai-agent-pg, ai-agent-valkey)")
+	servicesCreateCmd.Flags().Int("ttl-hours", 0, "Auto-delete service after N hours (1-720, for ephemeral workloads)")
+	servicesCreateCmd.Flags().Bool("ephemeral", false, "Mark service as ephemeral (auto-cleanup enabled)")
+	servicesCreateCmd.Flags().String("agent-framework", "", "AI agent framework: langchain, crewai, autogen, claude")
+	servicesCreateCmd.Flags().String("agent-purpose", "", "AI agent purpose: conversation_history, session_cache")
 
 	servicesDeleteCmd.Flags().Bool("confirm", false, "Skip confirmation prompt")
 
@@ -148,6 +157,19 @@ func runServicesGet(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// createServiceRequestExtended extends the SDK's CreateServiceRequest with
+// AI agent preset fields. These fields are serialized as part of the JSON body
+// sent to the API.
+type createServiceRequestExtended struct {
+	foundrydb.CreateServiceRequest
+
+	Preset         string `json:"preset,omitempty"`
+	TTLHours       *int   `json:"ttl_hours,omitempty"`
+	Ephemeral      *bool  `json:"ephemeral,omitempty"`
+	AgentFramework string `json:"agent_framework,omitempty"`
+	AgentPurpose   string `json:"agent_purpose,omitempty"`
+}
+
 func runServicesCreate(cmd *cobra.Command, args []string) error {
 	name, _ := cmd.Flags().GetString("name")
 	dbType, _ := cmd.Flags().GetString("type")
@@ -157,6 +179,11 @@ func runServicesCreate(cmd *cobra.Command, args []string) error {
 	storageSize, _ := cmd.Flags().GetInt("storage-size")
 	storageTier, _ := cmd.Flags().GetString("storage-tier")
 	allowedCIDRs, _ := cmd.Flags().GetStringSlice("allowed-cidrs")
+	preset, _ := cmd.Flags().GetString("preset")
+	ttlHours, _ := cmd.Flags().GetInt("ttl-hours")
+	ephemeral, _ := cmd.Flags().GetBool("ephemeral")
+	agentFramework, _ := cmd.Flags().GetString("agent-framework")
+	agentPurpose, _ := cmd.Flags().GetString("agent-purpose")
 
 	// Prompt for missing required fields
 	if name == "" {
@@ -195,7 +222,30 @@ func runServicesCreate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	req := foundrydb.CreateServiceRequest{
+	// Validate AI agent flags
+	if agentFramework != "" {
+		validFrameworks := map[string]bool{
+			"langchain": true, "crewai": true, "autogen": true, "claude": true,
+		}
+		if !validFrameworks[agentFramework] {
+			return fmt.Errorf("invalid agent framework %q, must be one of: langchain, crewai, autogen, claude", agentFramework)
+		}
+	}
+
+	if agentPurpose != "" {
+		validPurposes := map[string]bool{
+			"conversation_history": true, "session_cache": true,
+		}
+		if !validPurposes[agentPurpose] {
+			return fmt.Errorf("invalid agent purpose %q, must be one of: conversation_history, session_cache", agentPurpose)
+		}
+	}
+
+	if ttlHours != 0 && (ttlHours < 1 || ttlHours > 720) {
+		return fmt.Errorf("ttl-hours must be between 1 and 720, got %d", ttlHours)
+	}
+
+	baseReq := foundrydb.CreateServiceRequest{
 		Name:          name,
 		DatabaseType:  foundrydb.DatabaseType(dbType),
 		Version:       version,
@@ -206,15 +256,54 @@ func runServicesCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(allowedCIDRs) > 0 {
-		req.AllowedCIDRs = allowedCIDRs
+		baseReq.AllowedCIDRs = allowedCIDRs
 	}
 
-	fmt.Printf("Creating service %q (%s %s, plan=%s, zone=%s, storage=%dGB %s)...\n",
-		name, dbType, version, plan, zone, storageSize, storageTier)
+	hasPresetFields := preset != "" || ttlHours != 0 || ephemeral || agentFramework != "" || agentPurpose != ""
 
-	client := newClient()
-	ctx := context.Background()
-	svc, err := client.CreateService(ctx, req)
+	statusParts := []string{
+		fmt.Sprintf("%s %s", dbType, version),
+		fmt.Sprintf("plan=%s", plan),
+		fmt.Sprintf("zone=%s", zone),
+		fmt.Sprintf("storage=%dGB %s", storageSize, storageTier),
+	}
+	if preset != "" {
+		statusParts = append(statusParts, fmt.Sprintf("preset=%s", preset))
+	}
+	if ephemeral {
+		statusParts = append(statusParts, "ephemeral=true")
+	}
+	if ttlHours != 0 {
+		statusParts = append(statusParts, fmt.Sprintf("ttl=%dh", ttlHours))
+	}
+
+	fmt.Printf("Creating service %q (%s)...\n", name, strings.Join(statusParts, ", "))
+
+	var svc *foundrydb.Service
+	var err error
+
+	if hasPresetFields {
+		// Use extended request with AI agent fields via raw HTTP call,
+		// since the SDK's CreateServiceRequest does not include these fields yet.
+		extReq := createServiceRequestExtended{
+			CreateServiceRequest: baseReq,
+			Preset:               preset,
+			AgentFramework:       agentFramework,
+			AgentPurpose:         agentPurpose,
+		}
+		if ttlHours != 0 {
+			extReq.TTLHours = &ttlHours
+		}
+		if ephemeral {
+			extReq.Ephemeral = &ephemeral
+		}
+		svc, err = createServiceRaw(extReq)
+	} else {
+		client := newClient()
+		ctx := context.Background()
+		svc, err = client.CreateService(ctx, baseReq)
+	}
+
 	if err != nil {
 		return err
 	}
@@ -227,8 +316,82 @@ func runServicesCreate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  ID:     %s\n", svc.ID)
 	fmt.Printf("  Name:   %s\n", svc.Name)
 	fmt.Printf("  Status: %s\n", svc.Status)
+	if preset != "" {
+		fmt.Printf("  Preset: %s\n", preset)
+	}
+	if ephemeral {
+		fmt.Printf("  Ephemeral: yes\n")
+	}
+	if ttlHours != 0 {
+		fmt.Printf("  TTL:    %d hours\n", ttlHours)
+	}
 	fmt.Printf("\nUse 'fdb services get %s' to monitor provisioning progress.\n", svc.ID)
 	return nil
+}
+
+// createServiceRaw sends a service creation request with extended fields directly
+// via HTTP, bypassing the SDK client which does not yet support preset fields.
+func createServiceRaw(req createServiceRequestExtended) (*foundrydb.Service, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	apiBaseURL := viper.GetString("api_url")
+	if apiURL != "" {
+		apiBaseURL = apiURL
+	}
+	apiBaseURL = strings.TrimRight(apiBaseURL, "/")
+
+	httpReq, err := http.NewRequest(http.MethodPost, apiBaseURL+"/managed-services", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+
+	user := viper.GetString("username")
+	pass := viper.GetString("password")
+	if username != "" {
+		user = username
+	}
+	if password != "" {
+		pass = password
+	}
+	httpReq.SetBasicAuth(user, pass)
+
+	org := viper.GetString("org")
+	if orgID != "" {
+		org = orgID
+	}
+	if org != "" {
+		httpReq.Header.Set("X-Active-Org-ID", org)
+	}
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request POST /managed-services: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(respBody))
+		if len(msg) > 200 {
+			msg = msg[:200] + "..."
+		}
+		return nil, fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, msg)
+	}
+
+	var svc foundrydb.Service
+	if err := json.Unmarshal(respBody, &svc); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &svc, nil
 }
 
 func runServicesDelete(cmd *cobra.Command, args []string) error {
