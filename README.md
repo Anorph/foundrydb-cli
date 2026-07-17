@@ -367,6 +367,39 @@ fdb compliance keys --json
 
 The `--org` flag may be omitted when the `--org` global flag or `FDB_ORG` environment variable is already set.
 
+### Inference Adapters
+
+Manage the customer LoRA fine-tuned adapter registry for a managed inference service (an open-weight LLM served by vLLM on a dedicated GPU). Register an uploaded adapter version, then promote it to hot-load it into vLLM with no restart.
+
+```bash
+# Register an uploaded LoRA adapter version (status "uploaded", not yet on a GPU).
+# Run after uploading the adapter artifact to the org's Files bucket.
+fdb inference adapters register \
+  --base-model mistral-small \
+  --served-model-name support-bot \
+  --version 3 \
+  --files-bucket org-1-adapters \
+  --files-key-prefix support-bot/v3 \
+  --sha256 3b1e...  `# 64-char lowercase hex sha256 of adapter_model.safetensors` \
+  --size-bytes 104857600 \
+  --base-model-license apache-2.0
+
+# List the versions relevant to a service: the ones bound to it (active +
+# superseded history) plus the org's uploaded, not-yet-promoted versions
+# trained on the service's base model.
+fdb inference adapters list <service-id>
+fdb inference adapters list <service-id> --json
+
+# Promote a version onto the serving GPU. It becomes "active" and any
+# previously active version is marked "superseded".
+fdb inference adapters promote <service-id> <adapter-id>
+
+# Rollback is the same command on a prior (superseded) version.
+fdb inference adapters promote <service-id> <previous-adapter-id>
+```
+
+Once active, the service answers to the adapter as `foundrydb_managed/<served-model-name>` on its OpenAI-compatible endpoint.
+
 ## Examples
 
 ### Full workflow: create and connect

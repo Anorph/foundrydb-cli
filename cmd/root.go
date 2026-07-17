@@ -70,6 +70,7 @@ func init() {
 	rootCmd.AddCommand(complianceCmd)
 	rootCmd.AddCommand(attachmentCmd)
 	rootCmd.AddCommand(stackCmd)
+	rootCmd.AddCommand(inferenceCmd)
 }
 
 func initConfig() {
