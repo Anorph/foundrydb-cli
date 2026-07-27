@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
+	foundrydb "github.com/foundrydb/foundrydb-sdk-go/foundrydb"
 )
 
 func buildConnStringMux(svc foundrydb.Service, creds foundrydb.RevealPasswordResponse) *http.ServeMux {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
+	foundrydb "github.com/foundrydb/foundrydb-sdk-go/foundrydb"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

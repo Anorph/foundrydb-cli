@@ -428,3 +428,23 @@ echo "Connected to $PGHOST"
 ## License
 
 Apache 2.0. See [LICENSE](LICENSE).
+
+## Deploy a local directory
+
+```bash
+foundry deploy                        # create or update an app from this directory
+foundry deploy ./service --name api   # deploy a subdirectory as "api"
+foundry deploy --app <id>             # ship this directory into an existing app
+foundry deploy --wait                 # block until the app is Running
+```
+
+The directory is packed, uploaded, and built on the platform: with your
+Dockerfile if there is one, with Cloud Native Buildpacks if there is not.
+
+Common build and VCS artifacts (`.git`, `node_modules`, `dist`, `target`,
+`vendor`, `__pycache__`, `.venv`, ...) are excluded, so a deploy does not ship
+history or a directory of dependencies the platform rebuilds anyway. Add more
+with `--exclude`.
+
+Use this when the code is not somewhere the platform can clone from. For a git
+repository, point the app at the repository instead and let a push deploy it.

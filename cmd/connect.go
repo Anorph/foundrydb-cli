@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
+	foundrydb "github.com/foundrydb/foundrydb-sdk-go/foundrydb"
 	"github.com/spf13/cobra"
 )
 

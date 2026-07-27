@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	foundrydb "github.com/anorph/foundrydb-sdk-go/foundrydb"
+	foundrydb "github.com/foundrydb/foundrydb-sdk-go/foundrydb"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
